@@ -16,9 +16,13 @@
 cmake_minimum_required (VERSION 2.8)
 
 set (TUNNEL ops-tunnel)
-project (${TUNNEL})
+project (${TUNNEL} C)
 set (SRC_DIR src)
-set (INCL_DIR include)
+set (PROJECT_CLI cli)
+set (INCLUDE_DIR include)
+
+# Define compile flags
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -Wall -Werror")
 
 # Rules to locate needed libraries
 include(FindPkgConfig)
@@ -29,17 +33,22 @@ include_directories (${PROJECT_BINARY_DIR} ${PROJECT_SOURCE_DIR}/${INCL_DIR}
                      ${OVSCOMMON_INCLUDE_DIRS}
 )
 
-# Define compile flags
-set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -Wall -Werror")
+add_subdirectory(${PROJECT_SOURCE_DIR}/${SRC_DIR}/${PROJECT_CLI})
 
 # Source files to build ops-tunnel
 set (SOURCES ${SRC_DIR}/dummy.c)
 
+set (HEADERS ${INCLUDE_DIR}/tunnel_vty.h
+             ${INCLUDE_DIR}/vtysh_ovsdb_tunnel_context.h)
+
 # Rules to build ops-tunnel
 add_executable (${TUNNEL} ${SOURCES})
+set_target_properties(${TUNNEL} PROPERTIES LINKER_LANGUAGE C)
 
 target_link_libraries (${TUNNEL} ${OVSCOMMON_LIBRARIES} ${OVSDB_LIBRARIES}
                        -lpthread -lrt)
+
+install(FILES ${HEADERS} DESTINATION include)
 
 # Rules to install ops-tunnel binary in rootfs
 install(TARGETS ${TUNNEL}
