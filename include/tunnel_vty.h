@@ -25,24 +25,35 @@
 #define _TUNNEL_VTY_H
 
 /* Help strings */
-#define TUNNEL_NUM_HELP_STR             "Tunnel number\n"
-#define TUNNEL_MODE_HELP_STR            "Select a tunnel mode\n"
-#define TUNNEL_MODE_VXLAN_HELP_STR      "VxLAN tunnel mode for the interface\n"
-#define TUNNEL_MODE_GRE_HELP_STR        "GRE tunnel mode for the interface\n"
-#define TUNNEL_SOURCE_HELP_STR          "Source information\n"
-#define TUNNEL_SOURCE_IP_HELP_STR       "Set the tunnel source IP\n"
-#define TUNNEL_NO_SOURCE_IP_HELP_STR    "Remove tunnel source IP\n"
-#define TUNNEL_DEST_HELP_STR            "Destination information\n"
-#define TUNNEL_NO_DEST_IP_HELP_STR      "Remove the destination IP\n"
-#define TUNNEL_TTL_HELP_STR             "Time to live\n"
-#define TUNNEL_NO_TTL_HELP_STR          "Unset the TTL value\n"
-#define TUNNEL_SOURCE_IF_HELP_STR       "Source interface\n"
-#define TUNNEL_LOOPBACK_IF_HELP_STR     "Loopback interface\n"
+#define VLAN_NUM_HELP_STR                   "Vlan number\n"
+#define VNI_STR                             "Tunnel key\n"
+#define TUNNEL_VXLAN_STR                    "VxLAN information\n"
+#define TUNNEL_VXLAN_PORT_HELP_STR          "Set the udp-port for VxLAN\n"
+#define TUNNEL_VXLAN_PORT_NUM_HELP_STR      "UDP port number\n"
+#define TUNNEL_VXLAN_VNI_LIST_STR           "Set the vni for an interface\n"
+#define TUNNEL_VXLAN_VNI_LIST_NUM_HELP_STR  "Vni number\n"
+#define TUNNEL_VXLAN_VNI_LIST_HELP_STR      "Set the vni-list\n"
+#define TUNNEL_NUM_HELP_STR                 "Tunnel number\n"
+#define TUNNEL_MODE_HELP_STR                "Select a tunnel mode\n"
+#define TUNNEL_MODE_VXLAN_HELP_STR          "VxLAN tunnel mode for the interface\n"
+#define TUNNEL_MODE_GRE_HELP_STR            "GRE tunnel mode for the interface\n"
+#define TUNNEL_SOURCE_HELP_STR              "Source information\n"
+#define TUNNEL_SOURCE_IP_HELP_STR           "Set the tunnel source IP\n"
+#define TUNNEL_NO_SOURCE_IP_HELP_STR        "Remove tunnel source IP\n"
+#define TUNNEL_DEST_HELP_STR                "Destination information\n"
+#define TUNNEL_NO_DEST_IP_HELP_STR          "Remove the destination IP\n"
+#define TUNNEL_TTL_HELP_STR                 "Time to live\n"
+#define TUNNEL_NO_TTL_HELP_STR              "Unset the TTL value\n"
+#define TUNNEL_SOURCE_IF_HELP_STR           "Set the source interface\n"
+#define TUNNEL_NO_SOURCE_IF_HELP_STR        "Remove the source interface\n"
+#define TUNNEL_LOOPBACK_IF_HELP_STR         "Loopback interface\n"
+#define TUNNEL_LOOPBACK_IF_NUM_HELP_STR     "Loopback interface number\n"
 
 /* Constants */
-#define TUNNEL_MODE_GRE_STR     "gre"
-#define TUNNEL_IPV4_TYPE_STR    "ipv4"
-#define TUNNEL_INTF_RANGE       "<1-99>"
+#define TUNNEL_MODE_GRE_STR             "gre"
+#define TUNNEL_IPV4_TYPE_STR            "ipv4"
+#define TUNNEL_INTF_RANGE               "<1-99>"
+#define TUNNEL_MAX_VNIS_IN_VNI_LIST     8000
 
 void cli_post_init(void);
 void cli_pre_init(void);

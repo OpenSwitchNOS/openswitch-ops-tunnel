@@ -39,7 +39,6 @@
 #include "tunnel_vty.h"
 #include "memory.h"
 #include "prefix.h"
-#include "sockunion.h"
 #include "openvswitch/vlog.h"
 #include "openswitch-idl.h"
 #include "ovsdb-idl.h"
@@ -60,7 +59,12 @@ extern struct ovsdb_idl *idl;
 extern struct cmd_element cli_intf_mtu_cmd;
 extern struct cmd_element no_cli_intf_mtu_cmd;
 
+extern struct cmd_element cli_intf_shutdown_cmd;
+extern struct cmd_element no_cli_intf_shutdown_cmd;
+
 /* Helper functions */
+
+/* Get the loopback source interface name by interface */
 char *
 get_source_interface_name(char *intf_name)
 {
@@ -73,6 +77,7 @@ get_source_interface_name(char *intf_name)
     return src_intf_name;
 }
 
+/* Get the vlan name by vlan number */
 char *
 get_vlan_name(char *name)
 {
@@ -85,6 +90,7 @@ get_vlan_name(char *name)
     return vlan_name;
 }
 
+/* Retreive the Logical_Switch row for given tunnel_key */
 const struct ovsrec_logical_switch *
 get_logical_switch_by_vni(int64_t vni)
 {
@@ -99,6 +105,7 @@ get_logical_switch_by_vni(int64_t vni)
     return NULL;
 }
 
+/* Retreive the Interface row for given interface name */
 const struct ovsrec_interface *
 get_interface_by_name(char *tunnel_name)
 {
@@ -113,6 +120,7 @@ get_interface_by_name(char *tunnel_name)
     return NULL;
 }
 
+/* Retreive the Port row for given port name */
 const struct ovsrec_port *
 get_port_by_name(char *tunnel_name)
 {
@@ -127,6 +135,7 @@ get_port_by_name(char *tunnel_name)
     return NULL;
 }
 
+/* Retreive the VLAN row for given vlan name */
 const struct ovsrec_vlan *
 get_vlan_by_name(char *vlan_name)
 {
@@ -141,6 +150,7 @@ get_vlan_by_name(char *vlan_name)
     return NULL;
 }
 
+/* Retreive the Bridge row for given bridge name */
 const struct ovsrec_bridge *
 get_default_bridge()
 {
@@ -156,19 +166,10 @@ get_default_bridge()
 }
 
 /*
-const struct ovsrec_logical_switch *
-check_vni_id(const struct ovsrec_logical_switch *logical_switch_row, int64_t vni_id)
-{
-    OVSREC_LOGICAL_SWITCH_FOR_EACH(logical_switch_row, idl)
-    {
-        if (logical_switch_row->tunnel_key == (int64_t)vni_id)
-            return logical_switch_row;
-    }
-
-    return NULL;
-}
+ * Returns CMD_SUCCESS if transaction is successful.
+ * Logs OVSDB_TXN_COMMIT_ERROR when transaction commit fails
+ * and returns CMD_OVSDB_FAILURE.
 */
-
 int
 txn_status_and_log(const int txn_status)
 {
@@ -179,12 +180,17 @@ txn_status_and_log(const int txn_status)
     }
     else
     {
+        VLOG_ERR("Transaction commit failure in %s:%d ", __func__, __LINE__);
         VLOG_ERR(OVSDB_TXN_COMMIT_ERROR);
     }
 
     return status;
 }
 
+/*
+ * Adds a new port row in the Port table and
+ * port reference in 'ports' column in the Bridge table
+ */
 const struct ovsrec_port *
 add_port_reference_in_bridge(struct ovsdb_idl_txn *tunnel_txn,
                               char *tunnel_name,
@@ -276,6 +282,10 @@ add_gre_port_reference(struct ovsdb_idl_txn *tunnel_txn, char *tunnel_name)
     return add_port_reference_in_vrf(tunnel_txn, tunnel_name, default_vrf_row);
 }
 
+/*
+ * Adds a new interface row in the Interface table and
+ * interface reference in 'interfaces' column in the Port table
+ */
 void
 add_interface_reference_in_port(struct ovsdb_idl_txn *tunnel_txn,
                                  char *tunnel_name,
@@ -339,6 +349,10 @@ remove_port_reference_from_vrf(struct ovsdb_idl_txn *tunnel_txn,
     free(port_list);
 }
 
+/*
+ * Deletes a port and
+ * removes port reference from 'ports' column in the Bridge table
+ */
 void
 remove_port_reference_from_bridge(
                         struct ovsdb_idl_txn *tunnel_txn,
@@ -360,6 +374,10 @@ remove_port_reference_from_bridge(
     free(port_list);
 }
 
+/*
+ * Deletes an interface and
+ * removes interface reference from 'interfaces' column from the Port table
+ */
 void
 remove_interface_reference_from_port(struct ovsdb_idl_txn *tunnel_txn,
                                      char *tunnel_name,
@@ -423,6 +441,10 @@ remove_vxlan_port_reference(struct ovsdb_idl_txn *tunnel_txn, char *tunnel_name)
     return CMD_SUCCESS;
 }
 
+/*
+ * Adds vlan_to_vni binding in 'vlan_tunnel_keys' column in the Port table
+ * for given vlan and tunnel_key
+ */
 void
 add_vlan_to_vni_binding_in_port(
                             const struct ovsrec_port *port_row,
@@ -456,6 +478,10 @@ add_vlan_to_vni_binding_in_port(
     free(tunnel_key_list);
 }
 
+/*
+ * Removes vlan_to_vni binding from 'vlan_tunnel_keys' column in the Port table
+ * for given vlan and tunnel_key
+ */
 void
 remove_vlan_to_vni_binding_in_port(
                             const struct ovsrec_port *port_row,
@@ -684,6 +710,117 @@ unset_src_intf(const struct ovsrec_interface *if_row)
                            NULL);
 }
 
+/* Add new tunnel_key to 'vni_list' in 'options' column of Interface Table */
+char * add_vni_to_vni_list(const char *cur_vni_list, const char *vni)
+{
+    char *new_vni_list = NULL;
+    char *temp_vni_list = NULL;
+    char *copy_vni_list = NULL;
+    char *vni_str = NULL;
+    bool vni_found  = false;
+
+    copy_vni_list = xmalloc(sizeof(int64_t) * sizeof(char) *
+                            TUNNEL_MAX_VNIS_IN_VNI_LIST);
+    memset(copy_vni_list, 0, sizeof(int64_t) * sizeof(char) *
+           TUNNEL_MAX_VNIS_IN_VNI_LIST);
+    snprintf(copy_vni_list, sizeof(int64_t) * sizeof(char) *
+             TUNNEL_MAX_VNIS_IN_VNI_LIST, "%s", cur_vni_list);
+
+    new_vni_list = xmalloc(sizeof(int64_t) * sizeof(char) *
+                           TUNNEL_MAX_VNIS_IN_VNI_LIST);
+    memset(new_vni_list, 0, sizeof(int64_t) * sizeof(char) *
+           TUNNEL_MAX_VNIS_IN_VNI_LIST);
+
+    temp_vni_list = CONST_CAST(char *, cur_vni_list);
+
+    /*
+     * Check if there are already any vnis supported on tunnel interface.
+     * If the vni is already existent in the vni_list, no changes required.
+     * If the vni is not found in the vni_list append the new vni in the end.
+     * example of vni_list: "50 60 70".
+     */
+    if (temp_vni_list != NULL) {
+        vni_str = strtok(temp_vni_list, " ");
+        if (vni_str && (strcmp(vni_str, vni) != 0)) {
+            strcpy(new_vni_list, vni_str);
+            while ((vni_str = strtok(NULL, " ")) != NULL) {
+                if (strcmp(vni_str, vni) != 0) {
+                    strcat(new_vni_list, " ");
+                    strcat(new_vni_list, vni_str);
+                } else {
+                    vni_found = true;
+                    break;
+                }
+            }
+        } else {
+            vni_found = true;
+        }
+
+        if (!vni_found) {
+            strcat(new_vni_list, " ");
+            strcat(new_vni_list, vni);
+        } else {
+            memcpy(new_vni_list, copy_vni_list, strlen(copy_vni_list));
+        }
+    } else {
+        memcpy(new_vni_list, vni, strlen(vni));
+    }
+
+    new_vni_list[strlen(new_vni_list)] = '\0';
+    free(copy_vni_list);
+
+    return new_vni_list;
+}
+
+/* Remove new tunnel_key to 'vni_list' in 'options' column of Interface Table */
+char * remove_vni_to_vni_list(const char *cur_vni_list, const char *vni)
+{
+    char *temp_vni_list = NULL;
+    char *new_vni_list = NULL;
+    char *vni_str = NULL;
+    bool first_vni_found = false;
+
+    new_vni_list = xmalloc(sizeof(int64_t) * sizeof(char) *
+                           TUNNEL_MAX_VNIS_IN_VNI_LIST);
+    memset(new_vni_list, 0, sizeof(int64_t) * sizeof(char) *
+           TUNNEL_MAX_VNIS_IN_VNI_LIST);
+
+    temp_vni_list = CONST_CAST(char *, cur_vni_list);
+
+    /*
+     * Find the given vni in the 'vni_list' inside 'options' in Interface table.
+     * If the vni found in the vni_list, skip it and do not add to new_vni_list.
+     * If the vni is not found in the vni_list, no changes required.
+     */
+    if(temp_vni_list != NULL) {
+        vni_str = strtok(temp_vni_list, " ");
+        if (strcmp(vni_str, vni) != 0)
+            snprintf(new_vni_list, sizeof(int64_t) * sizeof(char) *
+                     TUNNEL_MAX_VNIS_IN_VNI_LIST, "%s", vni_str);
+        else
+            first_vni_found = true;
+
+        while ((vni_str = strtok(NULL, " ")) != NULL) {
+            if (!first_vni_found) {
+                if (strcmp(vni_str, vni) != 0) {
+                    strcat(new_vni_list, " ");
+                    strcat(new_vni_list, vni_str);
+                }
+            } else {
+                strcat(new_vni_list, vni_str);
+                strcat(new_vni_list, " ");
+            }
+        }
+    }
+    if (new_vni_list[strlen(new_vni_list) - 1] == ' ')
+        new_vni_list[strlen(new_vni_list) - 1] = '\0';
+    else
+        new_vni_list[strlen(new_vni_list)] = '\0';
+
+    return new_vni_list;
+}
+
+/* Create an interface tunnel with vxlan mode */
 DEFUN (cli_create_tunnel,
        cli_create_tunnel_cmd,
        "interface tunnel " TUNNEL_INTF_RANGE " mode (vxlan)",
@@ -799,6 +936,7 @@ DEFUN (cli_update_tunnel,
     return CMD_SUCCESS;
 }
 
+/* Create an interface tunnel with gre ipv4 mode */
 ALIAS (cli_create_tunnel,
        cli_create_gre_tunnel_cmd,
        "interface tunnel " TUNNEL_INTF_RANGE " mode (gre) (ipv4)",
@@ -809,6 +947,7 @@ ALIAS (cli_create_tunnel,
        TUNNEL_MODE_GRE_HELP_STR
        "IPv4 mode for tunneling\n")
 
+/* Deletes the interface tunnel with given tunnel_name */
 DEFUN (cli_delete_tunnel,
        cli_delete_tunnel_cmd,
        "no interface tunnel " TUNNEL_INTF_RANGE,
@@ -916,9 +1055,9 @@ ALIAS (cli_no_set_tunnel_ip,
 DEFUN (cli_set_source_intf,
        cli_set_source_intf_cmd,
        "source-interface loopback <1-2147483647>",
-       TUNNEL_STR
+       TUNNEL_SOURCE_IF_HELP_STR
        TUNNEL_LOOPBACK_IF_HELP_STR
-       "Set the source interface IP\n")
+       TUNNEL_LOOPBACK_IF_NUM_HELP_STR)
 {
     char *src_intf_name = NULL;
 
@@ -948,9 +1087,9 @@ DEFUN (cli_no_set_source_intf,
        cli_no_set_source_intf_cmd,
        "no source-interface loopback <1-2147483647>",
        NO_STR
-       TUNNEL_SOURCE_IF_HELP_STR
+       TUNNEL_NO_SOURCE_IF_HELP_STR
        TUNNEL_LOOPBACK_IF_HELP_STR
-       "Remove the source interface\n")
+       TUNNEL_LOOPBACK_IF_NUM_HELP_STR)
 {
     const struct ovsrec_interface *if_row = NULL;
     const struct ovsrec_interface *if_loopback_row = NULL;
@@ -1170,7 +1309,8 @@ set_vxlan_tunnel_key(int64_t vni_id)
 DEFUN (cli_set_vxlan_tunnel_key,
         cli_set_vxlan_tunnel_key_cmd,
         "vni <1-16777216>",
-        TUNNEL_STR
+        VNI_STR
+        TUNNEL_VXLAN_VNI_LIST_NUM_HELP_STR
         "Set the tunnel key\n")
 {
     int64_t vni_id = (int64_t)(atoi(argv[0]));
@@ -1502,8 +1642,11 @@ DEFUN (cli_no_set_replication_group_ips,
 
 DEFUN (cli_set_vlan_to_vni_mapping,
         cli_set_vlan_to_vni_mapping_cmd,
-        "vlan VLAN_NUMBER vni <1-16777216>",
-        TUNNEL_STR
+        "vlan <1-4095> vni <1-16777216>",
+        VLAN_STR
+        VLAN_NUM_HELP_STR
+        VNI_STR
+        TUNNEL_VXLAN_VNI_LIST_NUM_HELP_STR
         "Set per-port vlan to vni mapping\n")
 {
     const struct ovsrec_port *port_row = NULL;
@@ -1520,6 +1663,7 @@ DEFUN (cli_set_vlan_to_vni_mapping,
     port_row = get_port_by_name(tunnel_name);
     ls_row = get_logical_switch_by_vni((int64_t)atoi(argv[1]));
     vlan_row = get_vlan_by_name(vlan_name);
+    free(vlan_name);
 
     if(port_row && ls_row && vlan_row)
     {
@@ -1551,8 +1695,12 @@ DEFUN (cli_set_vlan_to_vni_mapping,
 
 DEFUN (cli_no_set_vlan_to_vni_mapping,
         cli_no_set_vlan_to_vni_mapping_cmd,
-        "no vlan VLAN_NUMBER vni <1-16777216>",
-        TUNNEL_STR
+        "no vlan <1-4095> vni <1-16777216>",
+        NO_STR
+        VLAN_STR
+        VLAN_NUM_HELP_STR
+        VNI_STR
+        TUNNEL_VXLAN_VNI_LIST_NUM_HELP_STR
         "Remove vlan to vni mapping\n")
 {
     const struct ovsrec_port *port_row = NULL;
@@ -1569,6 +1717,7 @@ DEFUN (cli_no_set_vlan_to_vni_mapping,
     port_row = get_port_by_name(tunnel_name);
     ls_row = get_logical_switch_by_vni((int64_t)atoi(argv[1]));
     vlan_row = get_vlan_by_name(vlan_name);
+    free(vlan_name);
 
     if(port_row && ls_row && vlan_row)
     {
@@ -1717,8 +1866,10 @@ DEFUN (cli_no_set_global_vlan_to_vni_mapping,
 DEFUN (cli_set_vxlan_udp_port,
         cli_set_vxlan_udp_port_cmd,
         "vxlan udp-port <1-65535>",
-        TUNNEL_STR
-        "Set the vxlan udp port\n")
+        TUNNEL_VXLAN_STR
+        TUNNEL_VXLAN_PORT_HELP_STR
+        TUNNEL_VXLAN_PORT_NUM_HELP_STR
+        "Set the vxlan udp-port\n")
 {
     struct smap options = SMAP_INITIALIZER(&options);
     const struct ovsrec_interface *intf_row = NULL;
@@ -1763,8 +1914,10 @@ DEFUN (cli_set_vxlan_udp_port,
 DEFUN (cli_no_set_vxlan_udp_port,
         cli_no_set_vxlan_udp_port_cmd,
         "no vxlan udp-port <1-65535>",
-        TUNNEL_STR
-        "Set the vxlan port to default (4789)\n")
+        NO_STR
+        TUNNEL_VXLAN_STR
+        TUNNEL_VXLAN_PORT_HELP_STR
+        "Set the vxlan udp-port to default(4789)\n")
 {
     struct smap options = SMAP_INITIALIZER(&options);
     const struct ovsrec_interface *intf_row = NULL;
@@ -1809,8 +1962,9 @@ DEFUN (cli_no_set_vxlan_udp_port,
 DEFUN (cli_set_vni_list,
         cli_set_vni_list_cmd,
         "vxlan-vni <1-8000>",
-        TUNNEL_STR
-        "Set the list of VNIs used by an interface\n")
+        TUNNEL_VXLAN_VNI_LIST_STR
+        TUNNEL_VXLAN_VNI_LIST_NUM_HELP_STR
+        TUNNEL_VXLAN_VNI_LIST_HELP_STR)
 {
     struct smap options = SMAP_INITIALIZER(&options);
     const struct ovsrec_interface *intf_row = NULL;
@@ -1848,19 +2002,9 @@ DEFUN (cli_set_vni_list,
 
         cur_vni_list = smap_get(&intf_row->options, OVSREC_INTERFACE_OPTIONS_VNI_LIST);
 
-        new_vni_list = xmalloc(sizeof(int64_t) * sizeof(char) * 8000);
-        memset(new_vni_list, 0, (sizeof(int64_t) * sizeof(char) * 8000));
+        /* Add new vni to vni_list */
+        new_vni_list = add_vni_to_vni_list(cur_vni_list, argv[0]);
 
-        if(cur_vni_list != NULL)
-        {
-            strcpy(new_vni_list, cur_vni_list);
-            strcat(new_vni_list, " ");
-            strcat(new_vni_list, argv[0]);
-        }
-        else
-            strcpy(new_vni_list, argv[0]);
-
-        new_vni_list[strlen(new_vni_list)] = '\0';
         smap_clone(&options, &intf_row->options);
         smap_replace(&options, OVSREC_INTERFACE_OPTIONS_VNI_LIST,
                     new_vni_list);
@@ -1884,8 +2028,10 @@ DEFUN (cli_set_vni_list,
 DEFUN (cli_no_set_vni_list,
         cli_no_set_vni_list_cmd,
         "no vxlan-vni <1-8000>",
-        TUNNEL_STR
-        "Remove the vni from tunnel interface\n")
+        NO_STR
+        TUNNEL_VXLAN_VNI_LIST_STR
+        TUNNEL_VXLAN_VNI_LIST_NUM_HELP_STR
+        TUNNEL_VXLAN_VNI_LIST_HELP_STR)
 {
     struct smap options = SMAP_INITIALIZER(&options);
     const struct ovsrec_interface *intf_row = NULL;
@@ -1893,11 +2039,9 @@ DEFUN (cli_no_set_vni_list,
     struct ovsdb_idl_txn *tunnel_txn = NULL;
     enum ovsdb_idl_txn_status status_txn;
     char *tunnel_name = NULL;
-    char *new_vni_list = NULL;
-    char *temp_vni_list = NULL;
-    const char *cur_vni_list = NULL;
-    char *vni_str = NULL;
     int64_t ls_tunnel_key = 0;
+    char *new_vni_list = NULL;
+    const char *cur_vni_list = NULL;
 
     tunnel_name = (char *)vty->index;
     ls_tunnel_key = (int64_t) atoi(argv[0]);
@@ -1925,32 +2069,20 @@ DEFUN (cli_no_set_vni_list,
 
         cur_vni_list = smap_get(&intf_row->options, OVSREC_INTERFACE_OPTIONS_VNI_LIST);
 
-        new_vni_list = xmalloc(sizeof(int64_t) * sizeof(char) * 8000);
-        memset(new_vni_list, 0, (sizeof(int64_t) * sizeof(char) * 8000));
-
-        temp_vni_list = CONST_CAST(char *, cur_vni_list);
-        temp_vni_list[strlen(cur_vni_list)] = '\0';
-        if(cur_vni_list != NULL)
-        {
-            vni_str = strtok(temp_vni_list, " ");
-            if (strcmp(vni_str, argv[0]) != 0)
-                strcpy(new_vni_list, vni_str);
-            while((vni_str = strtok(NULL, " ")) != NULL)
-            {
-                if (strcmp(vni_str, argv[0]) != 0)
-                {
-                    strcat(new_vni_list, vni_str);
-                    strcat(new_vni_list, " ");
-                }
-            }
-        }
-        new_vni_list[strlen(new_vni_list)] = '\0';
+        /* Remove given vni from vni_list */
+        new_vni_list = remove_vni_to_vni_list(cur_vni_list, argv[0]);
 
         smap_clone(&options, &intf_row->options);
-        smap_replace(&options, OVSREC_INTERFACE_OPTIONS_VNI_LIST,
-                    new_vni_list);
+        if (new_vni_list != '\0')
+            smap_replace(&options,
+                OVSREC_INTERFACE_OPTIONS_VNI_LIST, new_vni_list);
+        else
+            smap_remove(&options,
+                OVSREC_INTERFACE_OPTIONS_VNI_LIST);
+
         ovsrec_interface_set_options(intf_row, &options);
         smap_destroy(&options);
+
         free(new_vni_list);
 
         status_txn = cli_do_config_finish(tunnel_txn);
@@ -2129,9 +2261,6 @@ cli_post_init(void)
     install_element(CONFIG_NODE, &cli_create_tunnel_cmd);
     install_element(CONFIG_NODE, &cli_update_tunnel_cmd);
     install_element(CONFIG_NODE, &cli_delete_tunnel_cmd);
-    install_element(VXLAN_TUNNEL_INTERFACE_NODE, &cli_set_tunnel_ip_cmd);
-    install_element(VXLAN_TUNNEL_INTERFACE_NODE, &cli_no_set_tunnel_ip_cmd);
-    install_element(VXLAN_TUNNEL_INTERFACE_NODE, &cli_no_set_tunnel_ip_val_cmd);
     install_element(VXLAN_TUNNEL_INTERFACE_NODE, &cli_set_source_intf_cmd);
     install_element(VXLAN_TUNNEL_INTERFACE_NODE, &cli_no_set_source_intf_cmd);
     install_element(VXLAN_TUNNEL_INTERFACE_NODE, &cli_set_source_ip_cmd);
@@ -2148,6 +2277,8 @@ cli_post_init(void)
     install_element(VXLAN_TUNNEL_INTERFACE_NODE, &cli_no_set_vni_list_cmd);
     install_element(VXLAN_TUNNEL_INTERFACE_NODE, &vtysh_exit_tunnel_interface_cmd);
     install_element (VXLAN_TUNNEL_INTERFACE_NODE, &vtysh_end_all_cmd);
+    install_element (VXLAN_TUNNEL_INTERFACE_NODE, &cli_intf_shutdown_cmd);
+    install_element (VXLAN_TUNNEL_INTERFACE_NODE, &no_cli_intf_shutdown_cmd);
 
     /* Installing vni related commands */
     install_element(CONFIG_NODE, &cli_set_vxlan_tunnel_key_cmd);
