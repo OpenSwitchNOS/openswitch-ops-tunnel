@@ -43,6 +43,9 @@
 #define TUNNEL_MODE_GRE_STR     "gre"
 #define TUNNEL_IPV4_TYPE_STR    "ipv4"
 #define TUNNEL_INTF_RANGE       "<1-99>"
+#define VNI_RANGE               "<1-16777216>"
+#define VLAN_RANGE              "<1-4094>"
+#define UDP_PORT_RANGE          "<1-65535>"
 
 void cli_post_init(void);
 void cli_pre_init(void);
