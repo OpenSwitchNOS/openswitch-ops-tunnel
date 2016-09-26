@@ -72,6 +72,10 @@ vtysh_tunnel_context_clientcallback(void *p_private)
             vtysh_ovsdb_cli_print(p_msg, "%4s%s %s", "", "mcast-group-ip",
                                   logical_switch->mcast_group_ip);
         }
+
+        if (logical_switch->ip_addr)
+          vtysh_ovsdb_cli_print(p_msg, "%4s%s %s", "", "ip address",
+                                logical_switch->ip_addr);
     }
     vtysh_ovsdb_cli_print(p_msg,"!");
 
@@ -84,6 +88,7 @@ print_common_tunnel_running_config(vtysh_ovsdb_cbmsg_ptr p_msg,
                                    struct vty *vty,
                                    struct ovsdb_idl *idl)
 {
+    int i=0;
     const char *src_ip;
     const char *dest_ip;
     const char *cur_state;
@@ -118,6 +123,13 @@ print_common_tunnel_running_config(vtysh_ovsdb_cbmsg_ptr p_msg,
             {
                 VTY_PRINT(p_msg, vty, "%4s%s %s", "", "ip address",
                           port_row->ip6_address);
+            }
+
+            for (i=0; i<port_row->n_vlan_tunnel_keys; i++)
+            {
+                 VTY_PRINT(p_msg, vty, "%4s%s %ld %s %ld", "", "vlan",
+                           port_row->key_vlan_tunnel_keys[i]->id, "vni",
+                           port_row->value_vlan_tunnel_keys[i]->tunnel_key);
             }
         }
     }
@@ -186,7 +198,7 @@ print_vxlan_tunnel_running_config(vtysh_ovsdb_cbmsg_ptr p_msg,
                         OVSREC_INTERFACE_OPTIONS_VNI_LIST);
     if (vni_list)
     {
-        VTY_PRINT(p_msg, vty, "%4s%s %s", "", "vni", vni_list);
+        VTY_PRINT(p_msg, vty, "%4s%s %s", "", "vxlan-vni", vni_list);
     }
 
     // VxLAN UDP port
@@ -299,7 +311,6 @@ vtysh_tunnel_intf_context_clientcallback(void *p_private)
     {
         print_tunnel_intf_run_cfg(ifrow, p_msg->idl, p_msg, NULL /* vty */);
     }
-
     vtysh_ovsdb_cli_print(p_msg,"!");
     return e_vtysh_ok;
 }
@@ -311,7 +322,6 @@ vtysh_tunnel_intf_context_clientcallback(void *p_private)
 |     void *p_private: void type object typecast to required
 | Return : void
 -----------------------------------------------------------------------------*/
-
 vtysh_ret_val
 vtysh_global_vlan_vni_mapping_context_clientcallback(void *p_private)
 {
@@ -324,7 +334,7 @@ vtysh_global_vlan_vni_mapping_context_clientcallback(void *p_private)
 
     OVSREC_VLAN_FOR_EACH(vlan_row, p_msg->idl)
     {
-        if (vlan_row->tunnel_key && vlan_row->tunnel_key->tunnel_key)
+        if (vlan_row->tunnel_key)
         {
             vtysh_ovsdb_cli_print(p_msg, "%s %s %ld %s %ld", "vxlan", "vlan",
                                   vlan_row->id, "vni",
