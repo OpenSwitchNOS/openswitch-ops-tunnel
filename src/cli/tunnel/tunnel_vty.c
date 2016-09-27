@@ -61,6 +61,9 @@ extern struct cmd_element no_cli_intf_mtu_cmd;
 
 extern struct cmd_element cli_intf_shutdown_cmd;
 extern struct cmd_element no_cli_intf_shutdown_cmd;
+extern int cli_show_interface_exec(struct cmd_element *self, struct vty *vty,
+                                   int flags, int argc, const char *argv[],
+                                   bool brief);
 
 /* Helper functions */
 
@@ -2245,6 +2248,8 @@ gre_tunnel_add_clis(void)
     install_element(GRE_TUNNEL_INTERFACE_NODE, &no_cli_intf_mtu_cmd);
     install_element(GRE_TUNNEL_INTERFACE_NODE, &vtysh_exit_interface_cmd);
     install_element(GRE_TUNNEL_INTERFACE_NODE, &vtysh_end_all_cmd);
+    install_element(GRE_TUNNEL_INTERFACE_NODE, &cli_intf_shutdown_cmd);
+    install_element(GRE_TUNNEL_INTERFACE_NODE, &no_cli_intf_shutdown_cmd);
 }
 
 /* Install Tunnel related vty commands. */
@@ -2276,9 +2281,9 @@ cli_post_init(void)
     install_element(VXLAN_TUNNEL_INTERFACE_NODE, &cli_set_vni_list_cmd);
     install_element(VXLAN_TUNNEL_INTERFACE_NODE, &cli_no_set_vni_list_cmd);
     install_element(VXLAN_TUNNEL_INTERFACE_NODE, &vtysh_exit_tunnel_interface_cmd);
-    install_element (VXLAN_TUNNEL_INTERFACE_NODE, &vtysh_end_all_cmd);
-    install_element (VXLAN_TUNNEL_INTERFACE_NODE, &cli_intf_shutdown_cmd);
-    install_element (VXLAN_TUNNEL_INTERFACE_NODE, &no_cli_intf_shutdown_cmd);
+    install_element(VXLAN_TUNNEL_INTERFACE_NODE, &vtysh_end_all_cmd);
+    install_element(VXLAN_TUNNEL_INTERFACE_NODE, &cli_intf_shutdown_cmd);
+    install_element(VXLAN_TUNNEL_INTERFACE_NODE, &no_cli_intf_shutdown_cmd);
 
     /* Installing vni related commands */
     install_element(CONFIG_NODE, &cli_set_vxlan_tunnel_key_cmd);
