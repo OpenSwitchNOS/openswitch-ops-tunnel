@@ -86,6 +86,7 @@ print_common_tunnel_running_config(vtysh_ovsdb_cbmsg_ptr p_msg,
 {
     const char *src_ip;
     const char *dest_ip;
+    const char *cur_state;
     const struct ovsrec_port *port_row;
 
     // Source IP
@@ -119,6 +120,14 @@ print_common_tunnel_running_config(vtysh_ovsdb_cbmsg_ptr p_msg,
                           port_row->ip6_address);
             }
         }
+    }
+
+    // Current state
+    cur_state = smap_get(&if_row->user_config, INTERFACE_USER_CONFIG_MAP_ADMIN);
+    if (cur_state &&
+        !strcmp(cur_state, OVSREC_INTERFACE_USER_CONFIG_ADMIN_UP))
+    {
+        VTY_PRINT(p_msg, vty, "%4s%s", "", "no shutdown");
     }
 }
 
