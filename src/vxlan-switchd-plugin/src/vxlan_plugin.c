@@ -26,6 +26,7 @@
 #include "openvswitch/vlog.h"
 #include "plugin-extensions.h"
 #include "vxlan_plugin.h"
+#include "logical_switch.h"
 #include "asic-plugin.h"
 
 
@@ -109,6 +110,8 @@ int init(int phase_id)
     register_reconfigure_callback(&vxlan_port_delete_cb,
                                   BLK_BR_DELETE_PORTS,
                                   VXLAN_PLUGIN_PRIORITY);
+    logical_switch_init(phase_id);
+
     vxlan_create();
 
     return ret;
@@ -135,8 +138,7 @@ void vxlan_bridge_init_cb(struct blk_params *blk_params)
     ovsdb_idl_omit_alert(blk_params->idl, &ovsrec_vlan_col_tunnel_key);
 }
 
-
-static struct asic_plugin_interface*
+struct asic_plugin_interface*
 get_asic_plugin(void)
 {
     int ret = 0;
