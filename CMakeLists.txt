@@ -35,7 +35,7 @@ include_directories (${PROJECT_BINARY_DIR} ${PROJECT_SOURCE_DIR}/${INCL_DIR}
 )
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/${SRC_DIR}/${PROJECT_CLI})
-add_subdirectory(${PROJECT_SOURCE_DIR}/${SRC_DIR}/${VXLAN_SWITCHD_PLUGINS_DIR})
+add_subdirectory(${PROJECT_SOURCE_DIR}/${VXLAN_SWITCHD_PLUGINS_DIR})
 
 # Source files to build ops-tunnel
 set (SOURCES ${SRC_DIR}/dummy.c)
