@@ -16,8 +16,9 @@
 #ifndef __VXLAN_PLUGIN_H__
 #define __VXLAN_PLUGIN_H__
 
+#include "log-switch-asic-provider.h"
 #include "reconfigure-blocks.h"
-
+#include "vswitch-idl.h"
 #define VXLAN_PLUGIN_NAME  "vxlan"
 #define VXLAN_PLUGIN_MAJOR  0
 #define VXLAN_PLUGIN_MINOR  1
@@ -28,4 +29,68 @@ void vxlan_bridge_reconfigure_cb(struct blk_params *blk_params);
 void vxlan_port_add_cb(struct blk_params *blk_params);
 void vxlan_port_update_cb(struct blk_params *blk_params);
 void vxlan_port_delete_cb(struct blk_params *blk_params);
+/* bridge_reconfigure callback functions (registered by logical_switchos_plugin:init) */
+/*
+ * log_switch_callback_bridge_init
+ *
+ * bridge_reconfigure BLK_BRIDGE_INIT callback handler
+ *
+ * @param blk_params     struct holding references to ovsdb IDL
+ *                       and ofproto handler required by external plugins to
+ *                       properly process the reconfigure events
+ *
+ * @return none
+ */
+void log_switch_callback_bridge_init(struct blk_params *blk_params);
+/*
+ * log_switch_callback_bridge_reconfig
+ *
+ * bridge_reconfigure BLK_BR_FEATURE_RECONFIG callback handler
+ *
+ * @param blk_params     struct holding references to ovsdb IDL
+ *                       and ofproto handler required by external plugins to
+ *                       properly process the reconfigure events
+ *
+ * @return none
+ */
+void log_switch_callback_bridge_reconfig(struct blk_params *blk_params);
+
+/* Configuration of Logical Switch tables */
+/*
+ * ofproto_set_logical_switch
+ *
+ * sets (add/delete/update) Logical Switch parameters in an ofproto
+ *
+ * @param ofproto     struct ofproto that describes either a bridge or a VRF.
+ * @param aux         pointer to struct port that is used to look up a
+ *                    previously-added bundle
+ * @param action      add/delete/modify action.
+ * @param log_switch  pointer to logical_switch_node, describes how the logical switch
+ *                    should be configured.
+ *
+ * @return int        API status:
+ *                    0               success
+ *                    EOPNOTSUPP      this API not supported by this provider
+ *                    other value     ASIC provider dependent error
+ */
+int
+ofproto_set_logical_switch(const struct ofproto *ofproto, void *aux,
+                           enum logical_switch_action action,
+                           struct logical_switch_node *log_switch);
+/*
+ * logical_switch_lookup_by_key
+ *
+ * Lookup for a specified tunnel key in the Logical Switch table
+ *
+ * @param hmap                     Logical Switch hash table.
+ * @param br_name                  bridge name
+ * @param key                      tunnel key
+ *
+ * @return struct logical_switch   pointer to Logical Switch structure with
+ *                                 lookup result:
+ *                                 NULL             failure
+ *                                 valid pointer    success
+ */
+struct logical_switch *
+logical_switch_lookup_by_key(const struct shash *hmap, const char *br_name, const int key);
 #endif

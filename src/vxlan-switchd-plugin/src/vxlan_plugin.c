@@ -26,11 +26,14 @@
 #include "openvswitch/vlog.h"
 #include "plugin-extensions.h"
 #include "vxlan_plugin.h"
+#include "logical-switch.h"
 #include "asic-plugin.h"
 
 
 VLOG_DEFINE_THIS_MODULE(vxlan_plugin);
 static struct asic_plugin_interface *asic_plugin = NULL;
+static struct asic_plugin_interface*
+get_asic_plugin(void);
 
 struct vlan_node {
     char *name;
@@ -109,6 +112,14 @@ int init(int phase_id)
     register_reconfigure_callback(&vxlan_port_delete_cb,
                                   BLK_BR_DELETE_PORTS,
                                   VXLAN_PLUGIN_PRIORITY);
+
+    VLOG_INFO("[%s] Registering BLK_BRIDGE_INIT", VXLAN_PLUGIN_NAME);
+    register_reconfigure_callback(&log_switch_callback_bridge_init,
+                                  BLK_BRIDGE_INIT, VXLAN_PLUGIN_PRIORITY);
+
+    VLOG_INFO("[%s] Registering BLK_BR_FEATURE_RECONFIG", VXLAN_PLUGIN_NAME);
+    register_reconfigure_callback(&log_switch_callback_bridge_reconfig,
+                                  BLK_BR_FEATURE_RECONFIG, VXLAN_PLUGIN_PRIORITY);
     vxlan_create();
 
     return ret;
@@ -133,6 +144,265 @@ int destroy(void)
 void vxlan_bridge_init_cb(struct blk_params *blk_params)
 {
     ovsdb_idl_omit_alert(blk_params->idl, &ovsrec_vlan_col_tunnel_key);
+}
+
+
+/**
+ * bridge_reconfigure BLK_BRIDGE_INIT callback handler
+ */
+void log_switch_callback_bridge_init(struct blk_params *blk_params)
+{
+    /* Enable writes into various Logical Switch columns. */
+    ovsdb_idl_omit_alert(blk_params->idl, &ovsrec_logical_switch_col_tunnel_key);
+    ovsdb_idl_omit_alert(blk_params->idl, &ovsrec_logical_switch_col_bridge);
+    ovsdb_idl_omit_alert(blk_params->idl, &ovsrec_logical_switch_col_from);
+    ovsdb_idl_omit_alert(blk_params->idl, &ovsrec_logical_switch_col_description);
+    ovsdb_idl_omit_alert(blk_params->idl, &ovsrec_logical_switch_col_name);
+}
+
+/**
+ * add Logical Switch
+ */
+static void
+logical_switch_create(struct bridge *br,
+        const struct ovsrec_logical_switch *logical_switch_cfg)
+{
+    struct logical_switch *new_logical_switch = NULL;
+    struct logical_switch_node ofp_log_switch;
+    char hash_str[LSWITCH_HASH_STR_SIZE];
+
+    if(!br || !logical_switch_cfg) {
+        return;
+    }
+
+    /* Allocate structure to save state information for this logical_switch. */
+    new_logical_switch = xzalloc(sizeof(struct logical_switch));
+
+    /* The hash should really be bridge.name+type+tunnel_key */
+    logical_switch_hash(hash_str, sizeof(hash_str), br->name,
+                        logical_switch_cfg->tunnel_key);
+    /* No need to check for uniqueness because
+     * that's done before we call this function */
+    hmap_insert(&br->logical_switches, &new_logical_switch->node,
+                hash_string(hash_str, 0));
+
+    new_logical_switch->br = br;
+    new_logical_switch->cfg = logical_switch_cfg;
+    new_logical_switch->tunnel_key = (int)logical_switch_cfg->tunnel_key;
+    new_logical_switch->name = xstrdup(logical_switch_cfg->name);
+    new_logical_switch->description = xstrdup(logical_switch_cfg->description);
+
+    ofp_log_switch.name = logical_switch_cfg->name;
+    ofp_log_switch.tunnel_key = (int)logical_switch_cfg->tunnel_key;
+    ofp_log_switch.name = logical_switch_cfg->name;
+    ofp_log_switch.description = logical_switch_cfg->description;
+
+    ofproto_set_logical_switch(br->ofproto, NULL, LSWITCH_ACTION_ADD,
+            &ofp_log_switch);
+}
+
+/**
+ * delete Logical Switch
+ */
+static void
+logical_switch_delete(struct logical_switch *logical_switch)
+{
+    struct logical_switch_node ofp_log_switch;
+    struct bridge *br;
+
+    if (!logical_switch) {
+        return;
+    }
+
+    ofp_log_switch.name = logical_switch->name;
+    ofp_log_switch.description = logical_switch->description;
+    ofp_log_switch.tunnel_key = logical_switch->tunnel_key;
+
+    br = logical_switch->br;
+
+    ofproto_set_logical_switch(br->ofproto, NULL, LSWITCH_ACTION_DEL,
+            &ofp_log_switch);
+
+    hmap_remove(&br->logical_switches, &logical_switch->node);
+    free(logical_switch->name);
+    free(logical_switch->description);
+    free(logical_switch);
+}
+
+/**
+ * update Logical Switch
+ */
+static void
+logical_switch_update(struct logical_switch *cur_logical_switch,
+        const struct ovsrec_logical_switch *logical_switch)
+{
+    struct logical_switch_node ofp_log_switch;
+    struct bridge *br;
+
+    if (!cur_logical_switch || !logical_switch) {
+        return;
+    }
+
+    br = cur_logical_switch->br;
+
+    /* The tunnel key should not change. If it does, it will be seen
+     * as a new logical switch */
+    if((0 != strcmp(cur_logical_switch->description, logical_switch->description)) ||
+       (0 != strcmp(cur_logical_switch->name, logical_switch->name)))
+    {
+        VLOG_DBG("Found a modified logical switch: "
+                 "name=%s key=%ld description=%s",
+                 logical_switch->name, logical_switch->tunnel_key,
+                 logical_switch->description);
+
+        cur_logical_switch->description = xstrdup(logical_switch->description);
+        cur_logical_switch->name = xstrdup(logical_switch->name);
+
+        ofp_log_switch.name = logical_switch->name;
+        ofp_log_switch.description = logical_switch->description;
+        ofp_log_switch.tunnel_key = logical_switch->tunnel_key;
+        ofproto_set_logical_switch(br->ofproto, NULL, LSWITCH_ACTION_MOD,
+            &ofp_log_switch);
+    }
+
+}
+
+/**
+ * bridge_reconfigure BLK_BR_FEATURE_RECONFIG callback
+ *
+ * called after everything for a bridge has been add/deleted/updated
+ */
+void
+log_switch_callback_bridge_reconfig(struct blk_params *blk_params)
+{
+    struct logical_switch *logical_switch, *next, *found;
+    struct shash current_idl_logical_switches;
+    const struct ovsrec_logical_switch *logical_switch_row = NULL;
+    char hash_str[LSWITCH_HASH_STR_SIZE];
+
+    if(!blk_params->br) {
+        return;
+    }
+
+    logical_switch_row = ovsrec_logical_switch_first(blk_params->idl);
+    if (!logical_switch_row) {
+        VLOG_DBG("No rows in Logical Switch table, delete all in local hash");
+
+        /* Maybe all the Logical Switches got deleted */
+        HMAP_FOR_EACH_SAFE(logical_switch, next, node, &blk_params->br->logical_switches) {
+            logical_switch_delete(logical_switch);
+        }
+        return;
+    }
+
+    if ((!OVSREC_IDL_ANY_TABLE_ROWS_MODIFIED(logical_switch_row, blk_params->idl_seqno)) &&
+        (!OVSREC_IDL_ANY_TABLE_ROWS_DELETED(logical_switch_row, blk_params->idl_seqno)) &&
+        (!OVSREC_IDL_ANY_TABLE_ROWS_INSERTED(logical_switch_row, blk_params->idl_seqno))) {
+        VLOG_DBG("No modification in Logical Switch table");
+        return;
+    }
+
+    /* Collect all the logical_switches present on this Bridge */
+    shash_init(&current_idl_logical_switches);
+    OVSREC_LOGICAL_SWITCH_FOR_EACH(logical_switch_row, blk_params->idl) {
+        if (strcmp(blk_params->br->cfg->name, logical_switch_row->bridge->name) == 0) {
+            logical_switch_hash(hash_str, sizeof(hash_str), blk_params->br->name,
+                                logical_switch_row->tunnel_key);
+            if (!shash_add_once(&current_idl_logical_switches,
+                    hash_str, logical_switch_row)) {
+                VLOG_WARN("logical switch %s (key %ld) specified twice",
+                          logical_switch_row->name, logical_switch_row->tunnel_key);
+            }
+        }
+    }
+
+    /* Delete old logical_switches. */
+    logical_switch_row = ovsrec_logical_switch_first(blk_params->idl);
+    if (OVSREC_IDL_ANY_TABLE_ROWS_DELETED(logical_switch_row, blk_params->idl_seqno) ||
+        OVSREC_IDL_ANY_TABLE_ROWS_MODIFIED(logical_switch_row, blk_params->idl_seqno)) {
+        HMAP_FOR_EACH_SAFE (logical_switch, next, node, &blk_params->br->logical_switches) {
+            found = logical_switch_lookup_by_key(
+                &current_idl_logical_switches,
+                blk_params->br->name, logical_switch->tunnel_key);
+            if (!found) {
+                VLOG_DBG("Found a deleted logical_switch %s (key %d)",
+                         logical_switch->name, logical_switch->tunnel_key);
+                /* Need to update ofproto now since this logical_switch
+                 * won't be around for the "check for changes"
+                 * loop below. */
+                logical_switch_delete(logical_switch);
+            }
+        }
+    }
+
+    /* Add new logical_switches. */
+    logical_switch_row = ovsrec_logical_switch_first(blk_params->idl);
+    if (OVSREC_IDL_ANY_TABLE_ROWS_INSERTED(logical_switch_row, blk_params->idl_seqno) ||
+        OVSREC_IDL_ANY_TABLE_ROWS_MODIFIED(logical_switch_row, blk_params->idl_seqno)) {
+        OVSREC_LOGICAL_SWITCH_FOR_EACH(logical_switch_row, blk_params->idl) {
+            found = logical_switch_lookup_by_key(&current_idl_logical_switches,
+                                                 blk_params->br->name,
+                                                 logical_switch_row->tunnel_key);
+            if (!found) {
+                VLOG_DBG("Found an added logical_switch %s %ld",
+                    logical_switch_row->name, logical_switch_row->tunnel_key);
+                logical_switch_create(blk_params->br, logical_switch_row);
+            }
+        }
+    }
+
+    /* Check for changes in the logical_switch row entries. */
+    logical_switch_row = ovsrec_logical_switch_first(blk_params->idl);
+    if (OVSREC_IDL_ANY_TABLE_ROWS_MODIFIED(logical_switch_row, blk_params->idl_seqno)) {
+        HMAP_FOR_EACH (logical_switch, node, &blk_params->br->logical_switches) {
+            const struct ovsrec_logical_switch *row = logical_switch->cfg;
+
+            /* Check for changes to row. */
+            if (!OVSREC_IDL_IS_ROW_INSERTED(row, blk_params->idl_seqno) &&
+                 OVSREC_IDL_IS_ROW_MODIFIED(row, blk_params->idl_seqno)) {
+                    logical_switch_update(logical_switch, row);
+            }
+       }
+    }
+
+    /* Destroy the shash of the IDL logical_switches */
+    shash_destroy(&current_idl_logical_switches);
+}
+
+/* sets (add/delete/update) Logical Switch parameters in an ofproto. */
+int
+ofproto_set_logical_switch(const struct ofproto *ofproto, void *aux,
+                           enum logical_switch_action action,
+                           struct logical_switch_node *log_switch)
+{
+    int rc;
+    struct asic_plugin_interface *plugin = get_asic_plugin();
+
+    if (plugin == NULL) {
+        return EOPNOTSUPP;
+    }
+
+    rc = plugin->set_logical_switch ?
+         plugin->set_logical_switch(ofproto, aux, action, log_switch) :
+         EOPNOTSUPP;
+
+    VLOG_DBG("%s rc (%d) op(%d) name (%s) key (%d)",
+             __func__, rc, action, log_switch->name, log_switch->tunnel_key);
+    return rc;
+}
+
+struct logical_switch *
+logical_switch_lookup_by_key(const struct shash *hmap, const char *br_name, const int key)
+{
+    struct logical_switch *logical_switch = NULL;
+    char hash_str[LSWITCH_HASH_STR_SIZE];
+
+    if((NULL != hmap) && (NULL != br_name)) {
+        logical_switch_hash(hash_str, sizeof(hash_str), br_name, key);
+        logical_switch = shash_find_data(hmap, hash_str);
+    }
+
+    return logical_switch;
 }
 
 
