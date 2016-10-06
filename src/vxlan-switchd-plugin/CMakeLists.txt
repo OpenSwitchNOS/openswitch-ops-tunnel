@@ -38,7 +38,8 @@ set(CMAKE_CXX_FLAGS
 
 #set the files that will be compiled
 set (SOURCES
-  ${SRC_DIR}/vxlan_plugin.c)
+  ${SRC_DIR}/vxlan_plugin.c
+  ${SRC_DIR}/logical_switch.c)
 
 # Define and locate needed libraries and includes
 include(FindPkgConfig)
