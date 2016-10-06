@@ -16,16 +16,19 @@
 #ifndef __VXLAN_PLUGIN_H__
 #define __VXLAN_PLUGIN_H__
 
+#include "log-switch-asic-provider.h"
 #include "reconfigure-blocks.h"
-
+#include "vswitch-idl.h"
 #define VXLAN_PLUGIN_NAME  "vxlan"
 #define VXLAN_PLUGIN_MAJOR  0
 #define VXLAN_PLUGIN_MINOR  1
 #define VXLAN_PLUGIN_PRIORITY  NO_PRIORITY
 
-void vxlan_bridge_init_cb(struct blk_params *blk_params);
-void vxlan_bridge_reconfigure_cb(struct blk_params *blk_params);
-void vxlan_port_add_cb(struct blk_params *blk_params);
-void vxlan_port_update_cb(struct blk_params *blk_params);
-void vxlan_port_delete_cb(struct blk_params *blk_params);
+extern struct asic_plugin_interface *get_asic_plugin(void);
+extern void vxlan_bridge_init_cb(struct blk_params *blk_params);
+extern void vxlan_bridge_reconfigure_cb(struct blk_params *blk_params);
+extern void vxlan_port_add_cb(struct blk_params *blk_params);
+extern void vxlan_port_update_cb(struct blk_params *blk_params);
+extern void vxlan_port_delete_cb(struct blk_params *blk_params);
+
 #endif
