@@ -20,7 +20,7 @@ project (${TUNNEL})
 set (SRC_DIR src)
 set (PROJECT_CLI cli)
 set (INCLUDE_DIR include)
-set (VXLAN_SWITCHD_PLUGINS_DIR vxlan-switchd-plugin)
+set (VXLAN_SWITCHD_PLUGINS_DIR plugins)
 
 # Define compile flags
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -Wall -Werror")
@@ -35,7 +35,7 @@ include_directories (${PROJECT_BINARY_DIR} ${PROJECT_SOURCE_DIR}/${INCL_DIR}
 )
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/${SRC_DIR}/${PROJECT_CLI})
-add_subdirectory(${PROJECT_SOURCE_DIR}/${SRC_DIR}/${VXLAN_SWITCHD_PLUGINS_DIR})
+add_subdirectory(${PROJECT_SOURCE_DIR}/${VXLAN_SWITCHD_PLUGINS_DIR})
 
 # Source files to build ops-tunnel
 set (SOURCES ${SRC_DIR}/dummy.c)
