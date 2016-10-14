@@ -23,6 +23,36 @@ Tunnel utils
 from time import sleep
 
 
+def nping(host, dest, times, step):
+    step("Starting Ping...")
+    # send contrived traffic
+    # no broadcast, all unicast with well formed mac addrs
+    ping_cmd = ('ping -c ' + times + ' ' + dest)
+    step('Executing ' + ping_cmd)
+
+    output = host(ping_cmd, shell='bash')
+
+    return(output)
+
+
+def config_gre_tunnel(switch, s_ip, d_ip, tun_num, ip_addr, mask, step):
+    step("Configuring GRE tunnel")
+    switch_config = ["vtysh",
+                     "configure terminal",
+                     "interface tunnel {} mode gre ipv4".format(tun_num),
+                     "ip address {}{}".format(ip_addr, mask),
+                     "no shut",
+                     "source ip {}".format(s_ip),
+                     "destination ip {}". format(d_ip),
+                     "exit"]
+    config_switch(switch, switch_config, step)
+
+    sh_run = ["vtysh", "sh run", "exit"]
+    for config in sh_run:
+        switch(config)
+    step("Configuring Switch Tunnel Interface Completed!")
+
+
 def config_switch(switch, switch_config, step):
     for config in switch_config:
         switch(config)
