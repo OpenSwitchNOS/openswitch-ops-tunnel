@@ -324,7 +324,7 @@ set_logical_switch(const struct ofproto *ofproto, void *aux,
                            struct logical_switch_node *log_switch)
 {
     int rc;
-    struct asic_plugin_interface *plugin = get_asic_plugin();
+    struct vxlan_asic_plugin_interface *plugin = get_asic_plugin();
 
     if (plugin == NULL || log_switch == NULL) {
         return EOPNOTSUPP;
