@@ -27,11 +27,11 @@
 #include "plugin-extensions.h"
 #include "vxlan_plugin.h"
 #include "logical_switch.h"
-#include "asic-plugin.h"
+#include "vxlan-asic-plugin.h"
 
 
 VLOG_DEFINE_THIS_MODULE(vxlan_plugin);
-static struct asic_plugin_interface *asic_plugin = NULL;
+static struct vxlan_asic_plugin_interface *asic_plugin = NULL;
 
 struct vlan_node {
     char *name;
@@ -68,24 +68,9 @@ static void vxlan_create(void)
 
 int init(int phase_id)
 {
-    int ret = 0;
-    struct plugin_extension_interface *extension = NULL;
 
     VLOG_INFO("VXLAN plugin initialization");
 
-    ret = find_plugin_extension(ASIC_PLUGIN_INTERFACE_NAME,
-                                ASIC_PLUGIN_INTERFACE_MAJOR,
-                                ASIC_PLUGIN_INTERFACE_MINOR,
-                                &extension);
-    if (ret == 0) {
-        VLOG_INFO("Found [%s] asic plugin extension...", ASIC_PLUGIN_INTERFACE_NAME);
-        asic_plugin = (struct asic_plugin_interface *)extension->plugin_interface;
-    }
-    else {
-        VLOG_WARN("%s (v%d.%d) not found", ASIC_PLUGIN_INTERFACE_NAME,
-                  ASIC_PLUGIN_INTERFACE_MAJOR,
-                  ASIC_PLUGIN_INTERFACE_MINOR);
-    }
     VLOG_INFO("[%s] Registering BLK_BRIDGE_INIT", VXLAN_PLUGIN_NAME);
     register_reconfigure_callback(&vxlan_bridge_init_cb,
                                   BLK_BRIDGE_INIT,
@@ -114,7 +99,7 @@ int init(int phase_id)
 
     vxlan_create();
 
-    return ret;
+    return 0;
 }
 
 
@@ -138,7 +123,7 @@ void vxlan_bridge_init_cb(struct blk_params *blk_params)
     ovsdb_idl_omit_alert(blk_params->idl, &ovsrec_vlan_col_tunnel_key);
 }
 
-struct asic_plugin_interface*
+struct vxlan_asic_plugin_interface*
 get_asic_plugin(void)
 {
     int ret = 0;
@@ -147,30 +132,35 @@ get_asic_plugin(void)
     if (asic_plugin)
         return asic_plugin;
 
-    ret = find_plugin_extension(ASIC_PLUGIN_INTERFACE_NAME,
-                                ASIC_PLUGIN_INTERFACE_MAJOR,
-                                ASIC_PLUGIN_INTERFACE_MINOR,
+    ret = find_plugin_extension(VXLAN_ASIC_PLUGIN_INTERFACE_NAME,
+                                VXLAN_ASIC_PLUGIN_INTERFACE_MAJOR,
+                                VXLAN_ASIC_PLUGIN_INTERFACE_MINOR,
                                 &extension);
     if (ret == 0) {
-        VLOG_INFO("Found [%s] asic plugin extension...", ASIC_PLUGIN_INTERFACE_NAME);
-        asic_plugin = (struct asic_plugin_interface *)extension->plugin_interface;
+        VLOG_INFO("Found [%s] asic plugin extension...", VXLAN_ASIC_PLUGIN_INTERFACE_NAME);
+        asic_plugin = (struct vxlan_asic_plugin_interface *)extension->plugin_interface;
     }
     else {
-        VLOG_WARN("%s (v%d.%d) not found", ASIC_PLUGIN_INTERFACE_NAME,
-                  ASIC_PLUGIN_INTERFACE_MAJOR,
-                  ASIC_PLUGIN_INTERFACE_MINOR);
-        assert(0);
+        VLOG_WARN("%s (v%d.%d) not found", VXLAN_ASIC_PLUGIN_INTERFACE_NAME,
+                  VXLAN_ASIC_PLUGIN_INTERFACE_MAJOR,
+                  VXLAN_ASIC_PLUGIN_INTERFACE_MINOR);
+        return NULL;
     }
-    return asic_plugin;
+    return NULL;
 }
 
 
-static int vxlan_check_vlan_state_change(struct blk_params *blk_params)
+static void vxlan_check_vlan_state_change(struct blk_params *blk_params)
 {
     struct bridge *br = blk_params->br;
     unsigned int idl_seqno = blk_params->idl_seqno;
     int i;
-    struct asic_plugin_interface *plugin = get_asic_plugin();
+    struct vxlan_asic_plugin_interface *plugin = get_asic_plugin();
+
+    if (!plugin) {
+        VLOG_ERR("Could not find VXLAN ASIC plugin");
+        return;
+    }
 
     for (i = 0; i < br->cfg->n_vlans; i++) {
         const struct ovsrec_vlan *vlan_row = br->cfg->vlans[i];
@@ -214,7 +204,7 @@ static int vxlan_check_vlan_state_change(struct blk_params *blk_params)
                                                                node->vlan_id);
                     } else {
                         VLOG_ERR("No PD function vport_unbind_all_ports_on_vlan found");
-                        assert(0);
+                        return;
                     }
                 }
 
@@ -228,7 +218,7 @@ static int vxlan_check_vlan_state_change(struct blk_params *blk_params)
                                                              node->vlan_id);
                     } else {
                         VLOG_ERR("No PD function vport_bind_all_ports_on_vlan found");
-                        assert(0);
+                        return;
                     }
                 }
                 // Update tunnel key
@@ -236,7 +226,7 @@ static int vxlan_check_vlan_state_change(struct blk_params *blk_params)
             }
         } // if 'node'
     }
-    return 0;
+    return;
 }
 
 
@@ -294,15 +284,15 @@ static void vxlan_bind_port_vlan(const char *vlan_name, struct port *port)
         VLOG_INFO("%s not bound to tunnel key %ld", vlan_name, tunnel_key);
         return;
     }
-    struct asic_plugin_interface *plugin;
+    struct vxlan_asic_plugin_interface *plugin;
     plugin = get_asic_plugin();
-    if (plugin->vport_bind_port_on_vlan) {
+    if (plugin && plugin->vport_bind_port_on_vlan) {
         plugin->vport_bind_port_on_vlan(tunnel_key,
                                         vlan_node->vlan_id,
                                         port);
     } else {
         VLOG_ERR("No PD function ops_vport_bind_port_on_vlan found");
-        assert(0);
+        return;
     }
 }
 
@@ -325,15 +315,15 @@ static void vxlan_unbind_port_vlan(const char *vlan_name, struct port *port)
         VLOG_INFO("%s not bound to tunnel key %ld", vlan_name, tunnel_key);
         return;
     }
-    struct asic_plugin_interface *plugin;
+    struct vxlan_asic_plugin_interface *plugin;
     plugin = get_asic_plugin();
-    if (plugin->vport_unbind_port_on_vlan) {
+    if (plugin && plugin->vport_unbind_port_on_vlan) {
         plugin->vport_unbind_port_on_vlan(tunnel_key,
                                           vlan_node->vlan_id,
                                           port);
     } else {
         VLOG_ERR("No PD function ops_vport_unbind_port_on_vlan found");
-        assert(0);
+        return;
     }
 }
 

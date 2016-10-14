@@ -17,12 +17,13 @@
 #define __VXLAN_PLUGIN_H__
 
 #include "reconfigure-blocks.h"
+#include "vxlan-asic-plugin.h"
 #define VXLAN_PLUGIN_NAME  "vxlan"
 #define VXLAN_PLUGIN_MAJOR  0
 #define VXLAN_PLUGIN_MINOR  1
 #define VXLAN_PLUGIN_PRIORITY  NO_PRIORITY
 
-extern struct asic_plugin_interface *get_asic_plugin(void);
+extern struct vxlan_asic_plugin_interface *get_asic_plugin(void);
 extern void vxlan_bridge_init_cb(struct blk_params *blk_params);
 extern void vxlan_bridge_reconfigure_cb(struct blk_params *blk_params);
 extern void vxlan_port_add_cb(struct blk_params *blk_params);
