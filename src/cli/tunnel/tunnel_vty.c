@@ -650,7 +650,7 @@ set_intf_src_ip(struct vty *vty, const struct ovsrec_interface *if_row,
         return CMD_WARNING;
     }
 
-    return set_intf_option(if_row, OVSREC_INTERFACE_OPTIONS_TUNNEL_SOURCE_IP,
+    return set_intf_option(if_row, OVSREC_INTERFACE_OPTIONS_LOCAL_IP,
                            new_ip);
 }
 
@@ -660,7 +660,7 @@ set_intf_src_ip(struct vty *vty, const struct ovsrec_interface *if_row,
 int
 unset_intf_src_ip(const struct ovsrec_interface *if_row)
 {
-    return set_intf_option(if_row, OVSREC_INTERFACE_OPTIONS_TUNNEL_SOURCE_IP,
+    return set_intf_option(if_row, OVSREC_INTERFACE_OPTIONS_LOCAL_IP,
                            NULL);
 }
 
