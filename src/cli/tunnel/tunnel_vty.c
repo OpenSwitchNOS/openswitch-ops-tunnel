@@ -692,8 +692,7 @@ set_src_intf(struct vty *vty, const struct ovsrec_interface *if_row,
     const char *src_ip = NULL;
 
     // Check if IP is already configured
-    src_ip = smap_get(&if_row->options,
-                      OVSREC_INTERFACE_OPTIONS_TUNNEL_SOURCE_IP);
+    src_ip = smap_get(&if_row->options, OVSREC_INTERFACE_OPTIONS_LOCAL_IP);
 
     if (src_ip)
     {

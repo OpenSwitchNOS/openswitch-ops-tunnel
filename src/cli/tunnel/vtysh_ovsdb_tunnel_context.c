@@ -95,8 +95,7 @@ print_common_tunnel_running_config(vtysh_ovsdb_cbmsg_ptr p_msg,
     const struct ovsrec_port *port_row;
 
     // Source IP
-    src_ip = smap_get(&if_row->options,
-                    OVSREC_INTERFACE_OPTIONS_TUNNEL_SOURCE_IP);
+    src_ip = smap_get(&if_row->options, OVSREC_INTERFACE_OPTIONS_LOCAL_IP);
     if (src_ip)
     {
         VTY_PRINT(p_msg, vty, "%4s%s %s %s", "", "source", "ip", src_ip);
